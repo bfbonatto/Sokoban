@@ -3,92 +3,66 @@
 module Sokoban where
 
 import Prelude hiding (Either(..))
+import Data.Maybe (fromMaybe)
+import qualified Data.Map.Strict as Map
 
+data BoardValue =
+	Empty
+	| Crate
+	| Wall
+	| Storage
+	| StorageAndCrate
+	deriving (Eq, Show)
 
-data Board = Board {walls :: [Coord], crates :: [Coord], man :: Coord, storage :: [Coord], bMax :: (Int, Int)} deriving (Show)
+data GameState = GameState {playerPosition :: Coord , gameBoard :: Board}
 
-displayBoard :: Board -> String
-displayBoard b = unlines . map (map func) $ coords
-	where 	(maxX, maxY)	= bMax b
-		coords				= [[(x,y) | x <- [0..maxX]] | y <- [0..maxY]]
-		func c
-			| b `isStorage` c && b `isCrate` c	= '*'
-			| b `isStorage` c && c == man b		= '+'
-			| c == man b						= '@'
-			| b `isCrate` c						= 'o'
-			| b `isWall` c						= '#'
-			| b `isStorage` c					= '.'
-			| otherwise							= ' '
-
-
-printBoard :: Board -> IO ()
-printBoard = putStrLn . displayBoard
-
-readInput :: String -> Input
-readInput "h" = Left
-readInput "j" = Down
-readInput "k" = Up
-readInput "l" = Right
-readInput s		= error s
-
--- Example Board:
--- #####
--- #.o@#
--- #####
-
-exampleBoard :: Board
-exampleBoard = Board {
-	walls 	= [(x,0) | x <- [0..4]] ++ [(x,2) | x <- [0..4]] ++ [(0,1),(4,1)],
-	crates 	= [(2,1)],
-	man		= (3,1),
-	storage	= [(1,1)],
-	bMax	= (4,2)
-}
-
+type Board = Map.Map Coord BoardValue
 
 type Coord = (Int, Int)
 
 data Input = Up | Down | Left | Right deriving (Show, Eq, Ord)
 
-
 add :: Coord -> Input -> Coord
-add (x, y) Up		= (x, y+1)
-add (x, y) Down		= (x, y-1)
-add (x, y) Left		= (x-1, y)
-add (x, y) Right	= (x+1, y)
+add (x, y) Up                    = (x, y+1)
+add (x, y) Down                  = (x, y-1)
+add (x, y) Left                  = (x-1, y)
+add (x, y) Right                 = (x+1, y)
 
-isWall :: Board -> Coord -> Bool
-isWall board c	= c `elem` walls board
+collideWith :: BoardValue -> BoardValue -> Maybe (BoardValue, BoardValue)
+collideWith Empty _                         = Nothing
+collideWith Wall _                          = Nothing
+collideWith Storage _                       = Nothing
+collideWith Crate Empty                     = Just (Empty           , Crate)
+collideWith Crate Crate                     = Just (Empty           , Crate)
+collideWith Crate Wall                      = Just (Crate           , Wall)
+collideWith Crate Storage                   = Just (Empty           , StorageAndCrate)
+collideWith Crate StorageAndCrate           = Just (Empty           , StorageAndCrate)
+collideWith StorageAndCrate Empty           = Just (Storage         , Crate)
+collideWith StorageAndCrate Crate           = Just (Storage         , Crate)
+collideWith StorageAndCrate Wall            = Just (StorageAndCrate , Wall)
+collideWith StorageAndCrate Storage         = Just (Storage         , StorageAndCrate)
+collideWith StorageAndCrate StorageAndCrate = Just (Storage         , StorageAndCrate)
 
-isCrate :: Board -> Coord -> Bool
-isCrate board c	= c `elem` crates board
+canMoveThrough :: BoardValue -> Bool
+canMoveThrough Crate                 = True
+canMoveThrough Storage               = True
+canMoveThrough StorageAndCrate       = True
+canMoveThrough _                     = False
 
-isStorage :: Board -> Coord -> Bool
-isStorage board c = c `elem` storage board
+canMove :: Board -> Coord -> Input -> Bool
+canMove board current direction = fromMaybe False (Map.lookup next board >>= \p -> Just (canMoveThrough p)) && canMove board next direction
+	where
+		next = add current direction
 
-isEmpty :: Board -> Coord -> Bool
-isEmpty board c	= not (isWall board c || isCrate board c || isStorage board c)
+move :: GameState -> Input -> GameState
+move (GameState player board) direction
+	| canMove board player direction = undefined
+	| otherwise = GameState player board
 
+type Game = [Input]
 
-
-move :: Input -> Board -> Board
-move direction board
-	| isEmpty board newPos	= board{man = newPos}
-	| isCrate board newPos && (isEmpty board newPos' || isStorage board newPos')	= board{crates = moveCrate newPos newPos', man = newPos}
-	| otherwise 		= board
-	where	pos 	= man board
-		newPos		= add pos direction
-		newPos'		= add newPos direction
-		moveCrate old new	= new : filter (old/=) (crates board)
-
+runGame :: GameState -> Game -> GameState
+runGame = foldl move
 
 main :: IO ()
-main = do
-		putStrLn "Welcome to Sokoban"
-		f exampleBoard
-
-f :: Board -> IO ()
-f board = do
-			printBoard board
-			c <- getLine
-			if c == "q" then putStrLn "quit" else f $ move (readInput c) board
+main = undefined
