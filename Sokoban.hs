@@ -33,13 +33,13 @@ collideWith Empty _                         = Nothing
 collideWith Wall _                          = Nothing
 collideWith Storage _                       = Nothing
 collideWith Crate Empty                     = Just (Empty           , Crate)
-collideWith Crate Crate                     = Just (Empty           , Crate)
-collideWith Crate Wall                      = Just (Crate           , Wall)
+collideWith Crate Crate                     = Nothing
+collideWith Crate Wall                      = Nothing
 collideWith Crate Storage                   = Just (Empty           , StorageAndCrate)
 collideWith Crate StorageAndCrate           = Just (Empty           , StorageAndCrate)
 collideWith StorageAndCrate Empty           = Just (Storage         , Crate)
 collideWith StorageAndCrate Crate           = Just (Storage         , Crate)
-collideWith StorageAndCrate Wall            = Just (StorageAndCrate , Wall)
+collideWith StorageAndCrate Wall            = Nothing
 collideWith StorageAndCrate Storage         = Just (Storage         , StorageAndCrate)
 collideWith StorageAndCrate StorageAndCrate = Just (Storage         , StorageAndCrate)
 
