@@ -2,67 +2,109 @@
 
 module Sokoban where
 
-import Prelude hiding (Either(..))
-import Data.Maybe (fromMaybe)
 import qualified Data.Map.Strict as Map
 
 data BoardValue =
 	Empty
+	| Man
 	| Crate
 	| Wall
 	| Storage
 	| StorageAndCrate
-	deriving (Eq, Show)
+	| StorageAndMan
+	deriving Eq
+
+instance (Show BoardValue) where
+	show Empty = " "
+	show Man = "@"
+	show Crate = "o"
+	show Storage = "."
+	show StorageAndCrate = "*"
+	show StorageAndMan = "+"
+	show Wall = "#"
+
+readBoardValue :: Char -> BoardValue
+readBoardValue '#' = Wall
+readBoardValue '@' = Man
+readBoardValue 'o' = Crate
+readBoardValue '.' = Storage
+readBoardValue '*' = StorageAndCrate
+readBoardValue '+' = StorageAndMan
+readBoardValue ' ' = Empty
 
 data GameState = GameState {playerPosition :: Coord , gameBoard :: Board}
 
 type Board = Map.Map Coord BoardValue
 
+printBoard :: Board -> String
+printBoard b = foldr1 (\f s -> f ++ "\n" ++ s) $ map (concatMap ( show . snd)) inOrder
+	where
+		pieces = Map.assocs b
+		inOrder = reverse $ rows pieces
+
+rows :: [(Coord, BoardValue)] -> [[(Coord, BoardValue)]]
+rows [] = []
+rows (e@((x,_), _):ls) = ( e:pre ) : rows pos
+	where
+		select ((x',_),_) = x'
+		(pre,pos) = span (\b -> x == select b) ls
+
 type Coord = (Int, Int)
 
-data Input = Up | Down | Left | Right deriving (Show, Eq, Ord)
+data Input = Up | Down | DLeft | DRight deriving (Show, Eq, Ord)
 
 add :: Coord -> Input -> Coord
-add (x, y) Up                    = (x, y+1)
-add (x, y) Down                  = (x, y-1)
-add (x, y) Left                  = (x-1, y)
-add (x, y) Right                 = (x+1, y)
+add (x, y) Up     = (x, y+1)
+add (x, y) Down   = (x, y-1)
+add (x, y) DLeft  = (x-1, y)
+add (x, y) DRight = (x+1, y)
 
-collideWith :: BoardValue -> BoardValue -> Maybe (BoardValue, BoardValue)
-collideWith Empty _                         = Nothing
-collideWith Wall _                          = Nothing
-collideWith Storage _                       = Nothing
-collideWith Crate Empty                     = Just (Empty           , Crate)
-collideWith Crate Crate                     = Nothing
-collideWith Crate Wall                      = Nothing
-collideWith Crate Storage                   = Just (Empty           , StorageAndCrate)
-collideWith Crate StorageAndCrate           = Just (Empty           , StorageAndCrate)
-collideWith StorageAndCrate Empty           = Just (Storage         , Crate)
-collideWith StorageAndCrate Crate           = Just (Storage         , Crate)
-collideWith StorageAndCrate Wall            = Nothing
-collideWith StorageAndCrate Storage         = Just (Storage         , StorageAndCrate)
-collideWith StorageAndCrate StorageAndCrate = Just (Storage         , StorageAndCrate)
+combine :: BoardValue -> BoardValue -> BoardValue
+combine Man Empty     = Man
+combine Man Storage   = StorageAndMan
+combine Crate Empty   = Crate
+combine Crate Storage = StorageAndCrate
 
-canMoveThrough :: BoardValue -> Bool
-canMoveThrough Crate                 = True
-canMoveThrough Storage               = True
-canMoveThrough StorageAndCrate       = True
-canMoveThrough _                     = False
+remove :: BoardValue -> BoardValue
+remove Man             = Empty
+remove Crate           = Empty
+remove StorageAndMan   = Storage
+remove StorageAndCrate = Storage
 
-canMove :: Board -> Coord -> Input -> Bool
-canMove board current direction = fromMaybe False (Map.lookup next board >>= \p -> Just (canMoveThrough p)) && canMove board next direction
+move :: Coord -> Input -> Board -> Maybe Board
+move coord direction board = do
+	here <- Map.lookup coord board
+	let next = add coord direction
+	board' <- move next direction board
+	neighbour <- Map.lookup next board'
+	let here' = remove here
+	let next' = combine here neighbour
+	case here of
+		Wall -> Nothing
+		Empty -> return board
+		_ -> return $ Map.insert coord here' $ Map.insert next next' board'
+
+parse :: String -> Board
+parse s = Map.fromList $ concat preDict
 	where
-		next = add current direction
+		xs = reverse $ lines s
+		enumerate = zip [1..]
+		numbered = enumerate $ map enumerate xs
+		combine' (y, ls) = map (\(x, c) -> ((x,y), c)) ls
+		preBoard = map combine' numbered
+		preDict = map (map (\(c, bv) -> (c, readBoardValue bv))) preBoard
 
-move :: GameState -> Input -> GameState
-move (GameState player board) direction
-	| canMove board player direction = undefined
-	| otherwise = GameState player board
 
-type Game = [Input]
+initialize :: Board -> Maybe GameState
+initialize board = do
+	let elems = map swap $ Map.assocs board
+	pos <- lookup Man elems
+	return $ GameState pos board
+	where
+		swap (a,b) = (b,a)
 
-runGame :: GameState -> Game -> GameState
-runGame = foldl move
 
 main :: IO ()
-main = undefined
+main = do
+	boardString <- getContents
+	putStr $ printBoard $  parse boardString
